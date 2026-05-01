@@ -4,7 +4,9 @@
   "description": "Stremio addon for XoilacZ football streams - EPL, La Liga, UCL, Ligue 1, Serie A, MLS",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start:vleague": "node vleague.js",
+    "start:all": "node index.js & node vleague.js"
   },
   "dependencies": {
     "stremio-addon-sdk": "^1.6.10",
