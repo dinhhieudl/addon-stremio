@@ -1,18 +1,15 @@
 {
-  "name": "xoilacz-bongda",
-  "version": "1.1.0",
-  "description": "Stremio addon for XoilacZ football streams - EPL, La Liga, UCL, Ligue 1, Serie A, MLS",
+  "name": "bongda-intl",
+  "version": "2.0.0",
+  "description": "Stremio addon - Premier League, La Liga, Champions League, MLS từ MonPlay",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "start:vleague": "node vleague.js",
-    "start:all": "node index.js & node vleague.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "stremio-addon-sdk": "^1.6.10",
-    "cheerio": "^1.0.0-rc.12",
     "node-fetch": "^2.7.0"
   },
-  "keywords": ["stremio", "football", "xoilac", "stream"],
+  "keywords": ["stremio", "football", "epl", "laliga", "ucl", "mls"],
   "license": "MIT"
 }
