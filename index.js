@@ -144,10 +144,15 @@ function leagueLow(s) {
 const TARGET_LEAGUE_NAMES = Object.values(LEAGUE_IDS).map(l => l.name);
 
 // ============================================================
-// LẤY STREAM URL từ trang /link/N (extract từ JS variable list_stream)
+// LẤY STREAM URL
+// Bước 1: Lấy list_stream từ trang /link/N → stream page URL
+// Bước 2: Fetch stream page → extract FLV URL
+// Bước 3: Convert FLV → m3u8 (HLS) cho Stremio
 // ============================================================
 async function getStreamUrl(matchUrl) {
   try {
+    // Bước 1: Lấy stream page URL từ list_stream
+    let streamPageUrl = null;
     for (const linkNum of [0, 1, 2]) {
       const linkUrl = matchUrl.replace(/\/$/, "") + `/link/${linkNum}`;
       const res = await fetch(linkUrl, {
@@ -159,43 +164,64 @@ async function getStreamUrl(matchUrl) {
       });
       const html = await res.text();
 
-      // Extract list_stream from JS: var list_stream = [["url1"],["url2"]];
-      const listMatch = html.match(
-        /var\s+list_stream\s*=\s*(\[[\s\S]*?\]);/
-      );
+      const listMatch = html.match(/var\s+list_stream\s*=\s*(\[[\s\S]*?\]);/);
       if (listMatch) {
         try {
           const listStream = JSON.parse(listMatch[1]);
-          const streams = [];
-          for (let i = 0; i < listStream.length; i++) {
-            const urls = listStream[i];
-            if (urls && urls.length > 0) {
-              let url = urls[0].replace(/\\\//g, "/");
-              streams.push({
-                title: `📺 Stream ${i + 1}`,
-                url,
-                linkNum: i,
-              });
-            }
+          if (listStream[0] && listStream[0][0]) {
+            streamPageUrl = listStream[0][0].replace(/\\\//g, "/");
+            break;
           }
-          if (streams.length > 0) return streams;
-        } catch (parseErr) {
-          console.error("[getStreamUrl] Parse error:", parseErr.message);
-        }
-      }
-
-      // Fallback: tìm iframe src
-      const iframeMatch =
-        html.match(/src=["'](https:\/\/xlz[^"']+)["']/i) ||
-        html.match(/src=["'](https:\/\/[^"']+(?:stream|live|channel|chanel)[^"']+)["']/i);
-      if (iframeMatch) {
-        return [{ title: `📺 Stream ${linkNum + 1}`, url: iframeMatch[1], linkNum }];
+        } catch {}
       }
     }
-    return [{ title: "🌐 Mở trên XoilacZ", url: matchUrl, linkNum: -1, isFallback: true }];
+
+    if (!streamPageUrl) {
+      return [{ title: "🌐 Mở trên XoilacZ", url: matchUrl, isFallback: true }];
+    }
+
+    // Bước 2: Fetch stream page → extract FLV URL
+    const streamRes = await fetch(streamPageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      timeout: 10000,
+    });
+    const streamHtml = await streamRes.text();
+
+    // Tìm FLV URL: https://live1.pro2cdnlive.com/live/channel15.flv?...
+    const flvMatch = streamHtml.match(
+      /(https?:\/\/[^\s"']+\.flv[^\s"']*)/i
+    );
+
+    if (flvMatch) {
+      // Bước 3: Convert FLV → m3u8
+      const flvUrl = flvMatch[1];
+      const m3u8Url = flvUrl.replace(/\.flv(\?.*)?$/i, ".m3u8$1");
+      return [
+        {
+          title: "📺 XoilacZ Stream (HLS)",
+          url: m3u8Url,
+        },
+        {
+          title: "📺 XoilacZ Stream (FLV - Backup)",
+          url: flvUrl,
+        },
+        {
+          title: "🌐 Mở trang trận đấu",
+          url: matchUrl,
+        },
+      ];
+    }
+
+    // Fallback: trả về stream page URL
+    return [
+      { title: "📺 XoilacZ Player", url: streamPageUrl },
+      { title: "🌐 Mở trang trận đấu", url: matchUrl },
+    ];
   } catch (err) {
     console.error("[getStreamUrl] Error:", err.message);
-    return [{ title: "🌐 Mở trên XoilacZ", url: matchUrl, linkNum: -1, isFallback: true }];
+    return [{ title: "🌐 Mở trên XoilacZ", url: matchUrl, isFallback: true }];
   }
 }
 
@@ -318,16 +344,13 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
     const streams = await getStreamUrl(matchUrl);
 
-    const stremioStreams = streams.map((s) => ({
-      title: s.title,
-      url: s.url,
-      ...(s.isFallback ? {} : { behaviorHints: { notWebReady: true } }),
-    }));
-
-    // Luôn thêm link mở trang trận đấu
-    stremioStreams.push({
-      title: "🌐 Mở trang trận đấu",
-      url: matchUrl,
+    const stremioStreams = streams.map((s) => {
+      const isHls = s.url && (s.url.includes(".m3u8") || s.url.includes("mpegurl"));
+      return {
+        title: s.title,
+        url: s.url,
+        ...(isHls ? {} : { behaviorHints: { notWebReady: true } }),
+      };
     });
 
     return { streams: stremioStreams };
